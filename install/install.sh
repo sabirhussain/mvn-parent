@@ -30,6 +30,9 @@ substitute_template() {
         -e "s|{{VERSION}}|$VERSION|g" \
         -e "s|{{REGISTRY}}|$REGISTRY|g" \
         -e "s|{{ORGANIZATION}}|$ORGANIZATION|g" \
+        -e "s|{{SONAR_HOST_URL}}|$SONAR_HOST_URL|g" \
+        -e "s|{{SONAR_PROJECT_KEY}}|$SONAR_PROJECT_KEY|g" \
+        -e "s|{{SONAR_COMMENT_PREFIX}}|$SONAR_COMMENT_PREFIX|g" \
         "$template_file" > "$output_file"
 }
 
@@ -52,11 +55,37 @@ read -p "Enter parent version [1.0.0-SNAPSHOT]: " VERSION
 VERSION=${VERSION:-1.0.0-SNAPSHOT}
 
 echo ""
+echo "=== SonarQube Configuration (Optional) ==="
+echo "Configure SonarQube settings for code quality analysis."
+read -p "Configure SonarQube? (y/N): " CONFIGURE_SONAR
+
+if [[ $CONFIGURE_SONAR =~ ^[Yy]$ ]]; then
+    read -p "Enter Sonar host URL [http://localhost:9000]: " SONAR_HOST_URL
+    SONAR_HOST_URL=${SONAR_HOST_URL:-http://localhost:9000}
+    
+    read -p "Enter Sonar project key [\${project.groupId}:\${project.artifactId}]: " SONAR_PROJECT_KEY
+    SONAR_PROJECT_KEY=${SONAR_PROJECT_KEY:-\${project.groupId}:\${project.artifactId}}
+    
+    SONAR_COMMENT_PREFIX=""
+else
+    SONAR_HOST_URL="http://localhost:9000"
+    SONAR_PROJECT_KEY="\${project.groupId}:\${project.artifactId}"
+    SONAR_COMMENT_PREFIX="# "
+fi
+
+echo ""
 echo "Configuration Summary:"
 echo "  GroupId:      $GROUP_ID"
 echo "  Registry:     $REGISTRY"
 echo "  Organization: $ORGANIZATION"
 echo "  Version:      $VERSION"
+if [[ $CONFIGURE_SONAR =~ ^[Yy]$ ]]; then
+echo "  Sonar:        Enabled"
+echo "    Host URL:   $SONAR_HOST_URL"
+echo "    Project Key: $SONAR_PROJECT_KEY"
+else
+echo "  Sonar:        Skipped (can be configured later in .mvn/maven.config)"
+fi
 echo "  Install Dir:  $(pwd)"
 echo ""
 read -p "Proceed with installation? (y/N): " CONFIRM

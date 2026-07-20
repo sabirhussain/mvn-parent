@@ -2,6 +2,10 @@
 -Dcontainer.registry={{REGISTRY}}
 -Dcontainer.organization={{ORGANIZATION}}
 
+# SonarQube configuration (local development)
+{{SONAR_COMMENT_PREFIX}}-Dsonar.host.url={{SONAR_HOST_URL}}
+{{SONAR_COMMENT_PREFIX}}-Dsonar.projectKey={{SONAR_PROJECT_KEY}}
+
 # Optional: Activate default profiles
 -Pcoverage
 
