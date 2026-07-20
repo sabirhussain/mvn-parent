@@ -13,16 +13,11 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- container image creation properties -->
-        <container.image.registry>${env.IMAGE_REGISTRY}</container.image.registry>
-        <container.image.repo>${env.IMAGE_REPO}</container.image.repo>
         <jib-maven-plugin.version>3.4.5</jib-maven-plugin.version>
 
         <jacoco.plugin.version>0.8.13</jacoco.plugin.version>
         <!-- sonar properties -->
         <sonar.plugin.version>5.1.0.4751</sonar.plugin.version>
-        <sonar.projectKey>${env.SONAR_PROJECT_KEY}</sonar.projectKey>
-        <sonar.moduleKey>${env.SONAR_MODULE_KEY}</sonar.moduleKey>
     </properties>
 
     <!-- Profile based distribution -->
@@ -67,10 +62,10 @@
                         <configuration>
                             <tasks>
                                 <echo>Displaying environment variables</echo>
-                                <echo>IMAGE REGISTRY: ${container.image.registry}</echo>
-                                <echo>IMAGE REPOSITORY: ${container.image.repo}</echo>
-                                <echo>SONAR PROJECT KEY: ${sonar.projectKey}</echo>
-                                <echo>SONAR MODULE KEY: ${sonar.moduleKey}</echo>
+                                <echo>IMAGE REGISTRY: ${container.registry}</echo>
+                                <echo>IMAGE REPOSITORY: ${container.organization}</echo>
+                                <echo>SONAR PROJECT KEY: ${sonar.host.url}</echo>
+                                <echo>SONAR MODULE KEY: ${sonar.projectKey}</echo>
                             </tasks>
                         </configuration>
                     </execution>
@@ -148,7 +143,9 @@
                     <version>${jib-maven-plugin.version}</version>
                     <configuration>
                         <to>
-                            <image>${container.image.registry}/${container.image.repo}/${project.artifactId}:${project.version}</image>
+                            <image>
+                                ${container.registry}/${container.organization}/${project.artifactId}:${project.version}
+                            </image>
                         </to>
                         <container>
                             <ports>
