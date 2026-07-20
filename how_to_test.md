@@ -304,7 +304,6 @@ ls -la install/templates/
 # README.template.md
 # env.template
 # maven-config.template
-# env-example.template
 # settings.xml.template
 ```
 
