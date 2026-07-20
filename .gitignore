@@ -16,3 +16,7 @@ reports/
 
 .idea/
 .vscode/
+
+# Environment files with credentials
+.env
+settings.xml

@@ -1,0 +1,19 @@
+# Maven Credentials Environment Variables
+# Copy this file to .env and set your actual values
+# Never commit .env to version control!
+
+# SonarQube/SonarCloud
+export SONAR_TOKEN=your-sonarcloud-token-here
+export SONAR_LOCAL_TOKEN=your-local-sonar-token-here
+
+# Maven Repository (Nexus/Artifactory)
+export MAVEN_REPO_USERNAME=your-username
+export MAVEN_REPO_PASSWORD=your-password
+
+# Container Registry (Docker Hub, GHCR, etc.)
+export DOCKER_USERNAME=your-docker-username
+export DOCKER_PASSWORD=your-docker-password
+
+# Usage:
+# source .env
+# mvn clean install

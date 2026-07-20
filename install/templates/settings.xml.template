@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              http://maven.apache.org/xsd/settings-1.0.0.xsd">
+    
+    <!-- Local Maven Repository Location -->
+    <localRepository>${user.home}/.m2/repository</localRepository>
+    
+    <!-- Servers for authentication (credentials) -->
+    <!-- RECOMMENDED: Use environment variables instead of hardcoding passwords -->
+    <servers>
+        <!-- SonarQube/SonarCloud Authentication -->
+        <server>
+            <id>sonar</id>
+            <username>${env.SONAR_TOKEN}</username>
+            <password>${env.SONAR_TOKEN}</password>
+        </server>
+        
+        <!-- Company Maven Repository (Nexus/Artifactory) -->
+        <server>
+            <id>company-releases</id>
+            <username>${env.MAVEN_REPO_USERNAME}</username>
+            <password>${env.MAVEN_REPO_PASSWORD}</password>
+        </server>
+        
+        <server>
+            <id>company-snapshots</id>
+            <username>${env.MAVEN_REPO_USERNAME}</username>
+            <password>${env.MAVEN_REPO_PASSWORD}</password>
+        </server>
+        
+        <!-- Container Registry Authentication -->
+        <!-- Server ID must match registry hostname (see CONTAINER_CREDENTIALS.md) -->
+        <server>
+            <id>docker.io</id>
+            <username>${env.DOCKER_USERNAME}</username>
+            <password>${env.DOCKER_PASSWORD}</password>
+        </server>
+        
+        <server>
+            <id>ghcr.io</id>
+            <username>${env.GITHUB_USERNAME}</username>
+            <password>${env.GITHUB_TOKEN}</password>
+        </server>
+    </servers>
+    
+    <!-- Mirrors (optional - for proxying Maven Central) -->
+    <mirrors>
+        <!-- Example: Use company Nexus as mirror -->
+        <!--
+        <mirror>
+            <id>company-nexus</id>
+            <name>Company Nexus Mirror</name>
+            <url>https://nexus.mycompany.com/repository/maven-public/</url>
+            <mirrorOf>central</mirrorOf>
+        </mirror>
+        -->
+    </mirrors>
+    
+    <!-- Profiles for different configurations -->
+    <profiles>
+        <!-- SonarCloud Profile -->
+        <profile>
+            <id>sonar</id>
+            <properties>
+                <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+                <sonar.organization>your-organization</sonar.organization>
+                <!-- Token is read from environment variable via server configuration -->
+                <sonar.login>${env.SONAR_TOKEN}</sonar.login>
+            </properties>
+        </profile>
+        
+        <!-- Local SonarQube Profile -->
+        <profile>
+            <id>sonar-local</id>
+            <properties>
+                <sonar.host.url>http://localhost:9000</sonar.host.url>
+                <sonar.login>${env.SONAR_LOCAL_TOKEN}</sonar.login>
+            </properties>
+        </profile>
+        
+        <!-- Company Repository Profile -->
+        <profile>
+            <id>company-repos</id>
+            <repositories>
+                <repository>
+                    <id>company-releases</id>
+                    <name>Company Release Repository</name>
+                    <url>https://nexus.mycompany.com/repository/maven-releases/</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
+                </repository>
+                <repository>
+                    <id>company-snapshots</id>
+                    <name>Company Snapshot Repository</name>
+                    <url>https://nexus.mycompany.com/repository/maven-snapshots/</url>
+                    <releases>
+                        <enabled>false</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>company-releases</id>
+                    <name>Company Plugin Repository</name>
+                    <url>https://nexus.mycompany.com/repository/maven-releases/</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+    </profiles>
+    
+    <!-- Active Profiles (automatically activated) -->
+    <activeProfiles>
+        <!-- Uncomment to activate specific profiles by default -->
+        <!-- <activeProfile>sonar</activeProfile> -->
+        <!-- <activeProfile>company-repos</activeProfile> -->
+    </activeProfiles>
+    
+</settings>

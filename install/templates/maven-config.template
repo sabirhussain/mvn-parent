@@ -1,0 +1,10 @@
+# Default container registry settings
+-Dcontainer.registry={{REGISTRY}}
+-Dcontainer.organization={{ORGANIZATION}}
+
+# Optional: Activate default profiles
+-Pcoverage
+
+# Optional: Performance tuning
+-T 1C
+--batch-mode
