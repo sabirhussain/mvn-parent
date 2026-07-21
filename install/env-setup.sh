@@ -79,13 +79,14 @@ fi
 echo ""
 echo "📝 Creating $ENV_FILE..."
 
-cat > "$ENV_FILE" <<EOF
+cat > "$ENV_FILE" <<'EOF'
 # Maven Credentials Environment Variables
-# Generated: $(date)
 # IMPORTANT: Never commit this file to version control!
 
 # Container Registry Authentication
-# Registry: $DETECTED_REGISTRY
+EOF
+
+cat >> "$ENV_FILE" <<EOF
 export DOCKER_USERNAME="$DOCKER_USERNAME"
 export DOCKER_PASSWORD="$DOCKER_PASSWORD"
 EOF
@@ -121,7 +122,7 @@ EOF
 fi
 
 # Add usage instructions
-cat >> "$ENV_FILE" <<EOF
+cat >> "$ENV_FILE" <<'EOF'
 
 # Usage:
 # source .env
