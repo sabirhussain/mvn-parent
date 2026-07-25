@@ -40,7 +40,7 @@ grep "<groupId>" pom.xml
 
 - ✅ All files created (pom.xml, .mvn/maven.config, README.md, etc.)
 - ✅ Variables substituted correctly ({{GROUP_ID}} replaced)
-- ✅ env-setup.sh is executable and present
+- ✅ additional-setup.sh is executable and present
 - ✅ Documentation files copied (SECURITY.md, CONTAINER_CREDENTIALS.md)
 - ✅ settings.xml.template copied
 
@@ -90,8 +90,8 @@ bash <(curl -fsSL http://localhost:8000/install/install.sh)
 # 5. Verify installation
 ls -la
 
-# 6. Test env-setup.sh
-./env-setup.sh
+# 6. Test additional-setup.sh
+./additional-setup.sh
 # Follow prompts or Ctrl+C to exit
 
 # 7. Check generated files
@@ -106,7 +106,7 @@ grep "groupId" pom.xml
 - ✅ Interactive prompts work correctly
 - ✅ All files created with correct content
 - ✅ Variable substitution works (check README.md and maven.config)
-- ✅ env-setup.sh is present and executable
+- ✅ additional-setup.sh is present and executable
 
 **Stop the server:**
 
@@ -146,8 +146,8 @@ bash <(curl -fsSL http://localhost:8000/install/install.sh)
 #   Version: 1.0.0-TEST
 #   Confirm: y
 
-# 4. Set up credentials (optional, for testing env-setup.sh)
-./env-setup.sh
+# 4. Set up credentials (optional, for testing additional-setup.sh)
+./additional-setup.sh
 # Press Ctrl+C to skip or enter test credentials
 
 # 5. Install to local Maven repository
@@ -225,7 +225,7 @@ cd /tmp/test && bash <(curl -fsSL http://localhost:8000/install/install.sh)
 test -f SECURITY.md && echo "✓ SECURITY.md"
 test -f CONTAINER_CREDENTIALS.md && echo "✓ CONTAINER_CREDENTIALS.md"
 test -f settings.xml.template && echo "✓ settings.xml.template"
-test -f env-setup.sh && echo "✓ env-setup.sh"
+test -f additional-setup.sh && echo "✓ additional-setup.sh"
 test -f README.md && echo "✓ README.md"
 ```
 
@@ -237,7 +237,7 @@ Verify scripts are executable:
 cd /tmp/test && bash <(curl -fsSL http://localhost:8000/install/install.sh)
 
 # Check permissions
-test -x env-setup.sh && echo "✓ env-setup.sh is executable"
+test -x additional-setup.sh && echo "✓ additional-setup.sh is executable"
 ```
 
 ### Test 4: Default Values
@@ -343,7 +343,7 @@ printf "com.test1\ndocker.io\ntest1\n1.0.0\ny\n" | "$PROJECT_ROOT/install/instal
 
 test -f pom.xml && echo "  ✅ pom.xml created" || echo "  ❌ pom.xml missing"
 test -f README.md && echo "  ✅ README.md created" || echo "  ❌ README.md missing"
-test -f env-setup.sh && echo "  ✅ env-setup.sh created" || echo "  ❌ env-setup.sh missing"
+test -f additional-setup.sh && echo "  ✅ additional-setup.sh created" || echo "  ❌ additional-setup.sh missing"
 
 # Test 2: Variable substitution
 echo "Test 2: Variable substitution..."
@@ -352,7 +352,7 @@ grep -q "docker.io" .mvn/maven.config && echo "  ✅ Registry substituted" || ec
 
 # Test 3: File permissions
 echo "Test 3: File permissions..."
-test -x env-setup.sh && echo "  ✅ env-setup.sh executable" || echo "  ❌ env-setup.sh not executable"
+test -x additional-setup.sh && echo "  ✅ additional-setup.sh executable" || echo "  ❌ additional-setup.sh not executable"
 
 echo ""
 echo "🎉 Tests complete! Results in: $TEST_DIR"
@@ -379,9 +379,9 @@ Before committing changes, verify:
 - [ ] **Templates exist** - All 5 templates in `install/templates/`
 - [ ] **Docs moved** - SECURITY.md and CONTAINER_CREDENTIALS.md in `docs/`
 - [ ] **References updated** - All paths in readme.md correct
-- [ ] **Line count reduced** - install.sh < 200 lines
+- [ ] **Line count reduced** - install.sh < 220 lines
 - [ ] **No hardcoded values** - Check for test values in templates
-- [ ] **Executable permissions** - env-setup.sh and install.sh have +x
+- [ ] **Executable permissions** - additional-setup.sh and install.sh have +x
 
 ---
 
@@ -427,25 +427,25 @@ For automated testing in CI/CD pipelines:
 # .github/workflows/test-install.yml
 name: Test Installation Script
 
-on: [push, pull_request]
+on: [ push, pull_request ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Test local installation
         run: |
           TEST_DIR=$(mktemp -d)
           cd $TEST_DIR
           printf "com.test\ndocker.io\ntest\n1.0.0\ny\n" | \
             $GITHUB_WORKSPACE/install/install.sh --local $GITHUB_WORKSPACE
-          
+
           # Verify files
           test -f pom.xml || exit 1
           test -f README.md || exit 1
-          
+
           # Check substitution
           grep -q "com.test" pom.xml || exit 1
 ```

@@ -11,13 +11,20 @@ Maven Parent POM for enforcing company standards across all Maven projects.
 
 ## Getting Started
 
-### 1. Set Up Credentials
+### 1. Set Up Credentials and Distribution Management
 
-Run the interactive credential setup:
+Run the interactive setup script:
 
 ```bash
-./env-setup.sh
+./additional-setup.sh
 ```
+
+This will configure:
+
+- Container registry credentials
+- SonarQube/SonarCloud tokens
+- Maven repository credentials
+- Distribution management (for `mvn deploy`)
 
 Or manually:
 
@@ -51,7 +58,18 @@ Add this parent to your project's `pom.xml`:
 
 ### 3. Deploy to Company Repository
 
-Update `pom.xml` with your repository settings:
+If you configured distribution management via `additional-setup.sh`, deploy using:
+
+```bash
+# Source credentials
+source .env
+
+# Deploy (uses settings.xml configuration)
+mvn clean deploy -Pcompany-repos
+```
+
+The `additional-setup.sh` script generates a `settings.xml` with your repository URLs and credentials. Alternatively,
+you can add `distributionManagement` directly to `pom.xml`:
 
 ```xml
 <distributionManagement>
@@ -66,11 +84,7 @@ Update `pom.xml` with your repository settings:
 </distributionManagement>
 ```
 
-Then deploy:
-
-```bash
-mvn clean deploy
-```
+**Note:** Server IDs in `distributionManagement` must match `<server>` IDs in your `~/.m2/settings.xml`.
 
 ## Features
 

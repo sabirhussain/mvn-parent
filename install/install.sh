@@ -30,9 +30,6 @@ substitute_template() {
         -e "s|{{VERSION}}|$VERSION|g" \
         -e "s|{{REGISTRY}}|$REGISTRY|g" \
         -e "s|{{ORGANIZATION}}|$ORGANIZATION|g" \
-        -e "s|{{SONAR_HOST_URL}}|$SONAR_HOST_URL|g" \
-        -e "s|{{SONAR_PROJECT_KEY}}|$SONAR_PROJECT_KEY|g" \
-        -e "s|{{SONAR_COMMENT_PREFIX}}|$SONAR_COMMENT_PREFIX|g" \
         "$template_file" > "$output_file"
 }
 
@@ -55,37 +52,11 @@ read -p "Enter parent version [1.0.0-SNAPSHOT]: " VERSION
 VERSION=${VERSION:-1.0.0-SNAPSHOT}
 
 echo ""
-echo "=== SonarQube Configuration (Optional) ==="
-echo "Configure SonarQube settings for code quality analysis."
-read -p "Configure SonarQube? (y/N): " CONFIGURE_SONAR
-
-if [[ $CONFIGURE_SONAR =~ ^[Yy]$ ]]; then
-    read -p "Enter Sonar host URL [http://localhost:9000]: " SONAR_HOST_URL
-    SONAR_HOST_URL=${SONAR_HOST_URL:-http://localhost:9000}
-    
-    read -p "Enter Sonar project key [\${project.groupId}:\${project.artifactId}]: " SONAR_PROJECT_KEY
-    SONAR_PROJECT_KEY=${SONAR_PROJECT_KEY:-\${project.groupId}:\${project.artifactId}}
-    
-    SONAR_COMMENT_PREFIX=""
-else
-    SONAR_HOST_URL="http://localhost:9000"
-    SONAR_PROJECT_KEY="\${project.groupId}:\${project.artifactId}"
-    SONAR_COMMENT_PREFIX="# "
-fi
-
-echo ""
 echo "Configuration Summary:"
 echo "  GroupId:      $GROUP_ID"
 echo "  Registry:     $REGISTRY"
 echo "  Organization: $ORGANIZATION"
 echo "  Version:      $VERSION"
-if [[ $CONFIGURE_SONAR =~ ^[Yy]$ ]]; then
-echo "  Sonar:        Enabled"
-echo "    Host URL:   $SONAR_HOST_URL"
-echo "    Project Key: $SONAR_PROJECT_KEY"
-else
-echo "  Sonar:        Skipped (can be configured later in .mvn/maven.config)"
-fi
 echo "  Install Dir:  $(pwd)"
 echo ""
 read -p "Proceed with installation? (y/N): " CONFIRM
@@ -136,8 +107,8 @@ cp "$TEMP_DIR"/.gitignore . 2>/dev/null || true
 cp "$TEMP_DIR/LICENSE" . 2>/dev/null || true
 
 # Copy scripts
-cp "$TEMP_DIR/install/env-setup.sh" .
-chmod +x env-setup.sh 2>/dev/null || true
+cp "$TEMP_DIR/install/additional-setup.sh" .
+chmod +x additional-setup.sh 2>/dev/null || true
 
 # Copy documentation
 cp "$DOCS_DIR/SECURITY.md" .
@@ -192,7 +163,7 @@ echo "Files created:"
 echo "  ✓ pom.xml (customized)"
 echo "  ✓ .mvn/maven.config"
 echo "  ✓ .env.example"
-echo "  ✓ env-setup.sh"
+echo "  ✓ additional-setup.sh"
 echo "  ✓ settings.xml.template"
 echo "  ✓ README.md"
 echo "  ✓ SECURITY.md"
@@ -206,11 +177,42 @@ echo "    <artifactId>mvn-parent</artifactId>"
 echo "    <version>$VERSION</version>"
 echo "  </parent>"
 echo ""
+echo "════════════════════════════════════════════════════════════"
+echo ""
+echo "Would you like to configure credentials and repositories now?"
+echo "(You can also run ./additional-setup.sh later)"
+echo ""
+read -p "Run additional setup now? (y/N): " RUN_ADDITIONAL
+
+if [[ $RUN_ADDITIONAL =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "Starting additional setup..."
+    echo ""
+    if [ -x ./additional-setup.sh ]; then
+        ./additional-setup.sh
+    else
+        chmod +x ./additional-setup.sh
+        ./additional-setup.sh
+    fi
+    
+    echo ""
+    echo "════════════════════════════════════════════════════════════"
+    echo ""
+fi
+
 echo "Next steps:"
-echo "  1. Set up credentials: ./env-setup.sh (or manually: cp .env.example .env && vim .env)"
-echo "  2. Review and customize pom.xml for your company standards"
-echo "  3. Install to local Maven repository: mvn clean install"
-echo "  4. Commit to your company's version control"
-echo "  5. Deploy to your Maven repository (Nexus/Artifactory)"
-echo "  6. Reference from child projects"
+if [[ ! $RUN_ADDITIONAL =~ ^[Yy]$ ]]; then
+    echo "  1. (Optional) Configure credentials and repositories: ./additional-setup.sh"
+    echo "  2. Review and customize pom.xml for your company standards"
+    echo "  3. Install to local Maven repository: mvn clean install"
+    echo "  4. Commit to your company's version control"
+    echo "  5. Deploy to your Maven repository (Nexus/Artifactory): mvn deploy"
+    echo "  6. Reference from child projects"
+else
+    echo "  1. Review and customize pom.xml for your company standards"
+    echo "  2. Install to local Maven repository: mvn clean install"
+    echo "  3. Commit to your company's version control"
+    echo "  4. Deploy to your Maven repository (Nexus/Artifactory): mvn deploy"
+    echo "  5. Reference from child projects"
+fi
 echo ""
