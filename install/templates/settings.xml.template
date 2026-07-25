@@ -83,6 +83,20 @@
             </properties>
         </profile>
         
+        <!-- Default Properties Profile -->
+        <profile>
+            <id>default-properties</id>
+            <properties>
+                <!-- Container registry settings -->
+                <container.registry>{{REGISTRY}}</container.registry>
+                <container.organization>{{ORGANIZATION}}</container.organization>
+                
+                <!-- SonarQube configuration -->
+                <sonar.host.url>http://localhost:9000</sonar.host.url>
+                <sonar.projectKey>${project.groupId}:${project.artifactId}</sonar.projectKey>
+            </properties>
+        </profile>
+        
         <!-- Company Repository Profile -->
         <profile>
             <id>company-repos</id>
@@ -131,6 +145,7 @@
         <!-- Uncomment to activate specific profiles by default -->
         <!-- <activeProfile>sonar</activeProfile> -->
         <!-- <activeProfile>company-repos</activeProfile> -->
+        <activeProfile>default-properties</activeProfile>
     </activeProfiles>
     
 </settings>

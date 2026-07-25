@@ -96,59 +96,46 @@ if [ -n "$MAVEN_REPO_USERNAME" ]; then
     echo ""
 fi
 
-# Generate .env file
+# Generate .env file from .env.example template
 echo ""
-echo "📝 Creating $ENV_FILE..."
+echo "📝 Creating $ENV_FILE from template..."
 
-cat > "$ENV_FILE" <<'EOF'
-# Maven Credentials Environment Variables
-# IMPORTANT: Never commit this file to version control!
+# Copy template and substitute values
+cp "$ENV_EXAMPLE" "$ENV_FILE"
 
-# Container Registry Authentication
-EOF
+# Substitute placeholder values with actual credentials
+sed -i.bak \
+    -e "s|export DOCKER_USERNAME=.*|export DOCKER_USERNAME=\"$DOCKER_USERNAME\"|g" \
+    -e "s|export DOCKER_PASSWORD=.*|export DOCKER_PASSWORD=\"$DOCKER_PASSWORD\"|g" \
+    "$ENV_FILE"
 
-cat >> "$ENV_FILE" <<EOF
-export DOCKER_USERNAME="$DOCKER_USERNAME"
-export DOCKER_PASSWORD="$DOCKER_PASSWORD"
-EOF
-
-# Add GitHub credentials if provided
+# Handle GitHub credentials (uncomment if provided)
 if [ -n "$GITHUB_USERNAME" ]; then
-    cat >> "$ENV_FILE" <<EOF
-
-# GitHub Container Registry
-export GITHUB_USERNAME="$GITHUB_USERNAME"
-export GITHUB_TOKEN="$GITHUB_TOKEN"
-EOF
+    sed -i.bak \
+        -e "s|# export GITHUB_USERNAME=.*|export GITHUB_USERNAME=\"$GITHUB_USERNAME\"|g" \
+        -e "s|# export GITHUB_TOKEN=.*|export GITHUB_TOKEN=\"$GITHUB_TOKEN\"|g" \
+        "$ENV_FILE"
 fi
 
-# Add Sonar credentials if provided
-if [ -n "$SONAR_TOKEN" ] || [ -n "$SONAR_LOCAL_TOKEN" ]; then
-    cat >> "$ENV_FILE" <<EOF
-
-# SonarQube/SonarCloud
-EOF
-    [ -n "$SONAR_TOKEN" ] && echo "export SONAR_TOKEN=\"$SONAR_TOKEN\"" >> "$ENV_FILE"
-    [ -n "$SONAR_LOCAL_TOKEN" ] && echo "export SONAR_LOCAL_TOKEN=\"$SONAR_LOCAL_TOKEN\"" >> "$ENV_FILE"
+# Handle Sonar credentials (update if provided)
+if [ -n "$SONAR_TOKEN" ]; then
+    sed -i.bak "s|export SONAR_TOKEN=.*|export SONAR_TOKEN=\"$SONAR_TOKEN\"|g" "$ENV_FILE"
 fi
 
-# Add Maven repo credentials if provided
+if [ -n "$SONAR_LOCAL_TOKEN" ]; then
+    sed -i.bak "s|export SONAR_LOCAL_TOKEN=.*|export SONAR_LOCAL_TOKEN=\"$SONAR_LOCAL_TOKEN\"|g" "$ENV_FILE"
+fi
+
+# Handle Maven repo credentials (update if provided)
 if [ -n "$MAVEN_REPO_USERNAME" ]; then
-    cat >> "$ENV_FILE" <<EOF
-
-# Maven Repository (Nexus/Artifactory)
-export MAVEN_REPO_USERNAME="$MAVEN_REPO_USERNAME"
-export MAVEN_REPO_PASSWORD="$MAVEN_REPO_PASSWORD"
-EOF
+    sed -i.bak \
+        -e "s|export MAVEN_REPO_USERNAME=.*|export MAVEN_REPO_USERNAME=\"$MAVEN_REPO_USERNAME\"|g" \
+        -e "s|export MAVEN_REPO_PASSWORD=.*|export MAVEN_REPO_PASSWORD=\"$MAVEN_REPO_PASSWORD\"|g" \
+        "$ENV_FILE"
 fi
 
-# Add usage instructions
-cat >> "$ENV_FILE" <<'EOF'
-
-# Usage:
-# source .env
-# mvn clean install
-EOF
+# Clean up backup file
+rm -f "$ENV_FILE.bak"
 
 # Set secure permissions
 chmod 600 "$ENV_FILE"

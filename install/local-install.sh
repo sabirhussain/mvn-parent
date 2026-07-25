@@ -104,9 +104,6 @@ chmod +x additional-setup.sh 2>/dev/null || true
 cp "$DOCS_DIR/SECURITY.md" .
 cp "$DOCS_DIR/CONTAINER_CREDENTIALS.md" .
 
-# Copy static templates
-cp "$TEMPLATES_DIR/settings.xml.template" .
-
 # Update pom.xml
 echo "🔧 Customizing pom.xml..."
 sed -i.bak "s|<groupId>io.xprevel</groupId>|<groupId>$GROUP_ID</groupId>|g" pom.xml
@@ -130,6 +127,9 @@ substitute_template "$TEMPLATES_DIR/env.template" ".env.example"
 
 # Create README.md from template
 substitute_template "$TEMPLATES_DIR/README.template.md" "README.md"
+
+# Create settings.xml.template from template (with placeholders substituted)
+substitute_template "$TEMPLATES_DIR/settings.xml.template" "settings.xml.template"
 
 echo ""
 echo "✅ Installation complete!"

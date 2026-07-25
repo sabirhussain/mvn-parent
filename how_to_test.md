@@ -14,20 +14,23 @@ This guide explains how to test the Maven Parent POM installation scripts during
 Understanding when to use each testing method:
 
 ### 🔧 Development Phase (Pre-Commit)
+
 **Use `local-install.sh` exclusively** - Tests your uncommitted changes directly from the filesystem.
 
 ```
 Edit code → Test with local-install.sh → Fix issues → Repeat
 ```
 
-### ✅ Validation Phase (Post-Commit) 
+### ✅ Validation Phase (Post-Commit)
+
 **Optionally test remote installation** - After pushing to GitHub, validate the production installation flow.
 
 ```
 Commit & Push → Test via GitHub URL → Verify end-user experience
 ```
 
-**❌ Never:** Try to test remote installation with Python HTTP server before committing - it won't work because `install.sh` clones from GitHub where your changes don't exist yet!
+**❌ Never:** Try to test remote installation with Python HTTP server before committing - it won't work because
+`install.sh` clones from GitHub where your changes don't exist yet!
 
 ---
 
@@ -158,6 +161,7 @@ rm -rf ~/.m2/repository/com/testcompany
 Test the production installation flow **after committing and pushing your changes**.
 
 **⚠️ Prerequisites:**
+
 - `local-install.sh` must be **committed and pushed** to GitHub
 - Changes must be on the branch you're testing (e.g., `main` or feature branch)
 
@@ -350,7 +354,8 @@ grep "{{" install/templates/*.template
 
 ## Automated Testing Script (Optional)
 
-You can optionally create an automated test script for continuous testing. This script is not included in the repository but can be created for your convenience:
+You can optionally create an automated test script for continuous testing. This script is not included in the repository
+but can be created for your convenience:
 
 ```bash
 #!/bin/bash
@@ -700,6 +705,7 @@ If you encounter issues during testing:
 - Permission denied → Run `chmod +x install/*.sh`
 
 **For questions or issues:**
+
 - Check the main project documentation
 - Review this testing guide thoroughly
 - Create an issue in the repository with details
