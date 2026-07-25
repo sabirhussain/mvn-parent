@@ -1,5 +1,14 @@
 #!/bin/bash
-# install.sh - Maven Parent POM Setup
+# install.sh - Remote Maven Parent POM Installation
+#
+# This script handles remote installation via curl | bash
+# Downloads the repository and delegates to local-install.sh
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/sabirhussain/mvn-parent/main/install/install.sh | bash
+#   
+# Or with bash -c for passing arguments:
+#   bash <(curl -fsSL ...) [arguments for local-install.sh]
 
 set -e
 
@@ -8,211 +17,42 @@ if [ ! -t 0 ] && [ -e /dev/tty ]; then
     exec < /dev/tty
 fi
 
-# Check for --local flag
-LOCAL_MODE=false
-if [ "$1" == "--local" ]; then
-    LOCAL_MODE=true
-    LOCAL_SOURCE_DIR="${2:-$(dirname "$0")}"
-    LOCAL_SOURCE_DIR="$(cd "$LOCAL_SOURCE_DIR" && pwd)"  # Parent of install/ dir
-    echo "🔧 LOCAL TEST MODE"
-    echo "   Using files from: $LOCAL_SOURCE_DIR"
-    echo ""
-fi
-
 REPO_URL="https://github.com/sabirhussain/mvn-parent"
 
-# Template substitution function
-substitute_template() {
-    local template_file=$1
-    local output_file=$2
-    
-    sed -e "s|{{GROUP_ID}}|$GROUP_ID|g" \
-        -e "s|{{VERSION}}|$VERSION|g" \
-        -e "s|{{REGISTRY}}|$REGISTRY|g" \
-        -e "s|{{ORGANIZATION}}|$ORGANIZATION|g" \
-        "$template_file" > "$output_file"
-}
-
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║         Maven Parent POM - Company Setup                ║"
+echo "║         Maven Parent POM - Remote Installation          ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-# Prompt for customization
-read -p "Enter your company groupId (e.g., com.mycompany): " GROUP_ID
-GROUP_ID=${GROUP_ID:-com.example}
-
-read -p "Enter container registry (docker.io/ghcr.io/custom): " REGISTRY
-REGISTRY=${REGISTRY:-docker.io}
-
-read -p "Enter container organization/namespace: " ORGANIZATION
-ORGANIZATION=${ORGANIZATION:-${GROUP_ID##*.}}
-
-read -p "Enter parent version [1.0.0-SNAPSHOT]: " VERSION
-VERSION=${VERSION:-1.0.0-SNAPSHOT}
-
-echo ""
-echo "Configuration Summary:"
-echo "  GroupId:      $GROUP_ID"
-echo "  Registry:     $REGISTRY"
-echo "  Organization: $ORGANIZATION"
-echo "  Version:      $VERSION"
-echo "  Install Dir:  $(pwd)"
-echo ""
-read -p "Proceed with installation? (y/N): " CONFIRM
-
-if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
-    echo "Installation cancelled."
-    exit 0
-fi
-
-# Clone repository to temp dir or use local files
+# Clone repository to temp dir
 TEMP_DIR=$(mktemp -d)
+echo "📦 Downloading Maven Parent POM..."
 
-if [ "$LOCAL_MODE" = true ]; then
-    echo "📦 Copying files from local directory..."
-    cp -r "$LOCAL_SOURCE_DIR"/* "$TEMP_DIR/" 2>/dev/null || true
-    cp -r "$LOCAL_SOURCE_DIR"/.mvn "$TEMP_DIR/" 2>/dev/null || true
-    cp "$LOCAL_SOURCE_DIR"/.gitignore "$TEMP_DIR/" 2>/dev/null || true
-    
-    # Verify critical files exist
-    if [ ! -f "$TEMP_DIR/pom.xml" ]; then
-        echo "❌ Error: pom.xml not found in $LOCAL_SOURCE_DIR"
-        rm -rf "$TEMP_DIR"
-        exit 1
-    fi
-else
-    echo "📦 Downloading Maven Parent POM..."
-    git clone --depth 1 "$REPO_URL" "$TEMP_DIR" 2>/dev/null || {
-        echo "❌ Failed to clone repository"
-        rm -rf "$TEMP_DIR"
-        exit 1
-    }
-fi
+git clone --depth 1 "$REPO_URL" "$TEMP_DIR" 2>/dev/null || {
+    echo "❌ Failed to clone repository"
+    rm -rf "$TEMP_DIR"
+    exit 1
+}
 
-# Set paths for templates and docs
-if [ "$LOCAL_MODE" = true ]; then
-    TEMPLATES_DIR="$TEMP_DIR/install/templates"
-    DOCS_DIR="$TEMP_DIR/docs"
-else
-    TEMPLATES_DIR="$TEMP_DIR/install/templates"
-    DOCS_DIR="$TEMP_DIR/docs"
-fi
+echo "✅ Downloaded to: $TEMP_DIR"
+echo ""
 
-# Copy core files to current directory
-echo "📋 Copying project files..."
-cp "$TEMP_DIR/pom.xml" .
-cp -r "$TEMP_DIR"/.mvn . 2>/dev/null || true
-cp "$TEMP_DIR"/.gitignore . 2>/dev/null || true
-cp "$TEMP_DIR/LICENSE" . 2>/dev/null || true
+# Make local-install.sh executable
+chmod +x "$TEMP_DIR/install/local-install.sh"
 
-# Copy scripts
-cp "$TEMP_DIR/install/additional-setup.sh" .
-chmod +x additional-setup.sh 2>/dev/null || true
+# Run local installation script
+echo "🚀 Starting installation..."
+echo ""
 
-# Copy documentation
-cp "$DOCS_DIR/SECURITY.md" .
-cp "$DOCS_DIR/CONTAINER_CREDENTIALS.md" .
+"$TEMP_DIR/install/local-install.sh" "$TEMP_DIR" "$@"
 
-# Copy static templates
-cp "$TEMPLATES_DIR/settings.xml.template" .
+# Store exit code
+INSTALL_EXIT_CODE=$?
 
+# Cleanup temp directory
+echo ""
+echo "🧹 Cleaning up temporary files..."
 rm -rf "$TEMP_DIR"
 
-# Update pom.xml
-echo "🔧 Customizing pom.xml..."
-sed -i.bak "s|<groupId>io.xprevel</groupId>|<groupId>$GROUP_ID</groupId>|g" pom.xml
-sed -i.bak "s|<version>1.0.0-SNAPSHOT</version>|<version>$VERSION</version>|" pom.xml
-
-# Update properties
-sed -i.bak "s|<container.registry>.*</container.registry>|<container.registry>$REGISTRY</container.registry>|" pom.xml
-sed -i.bak "s|<container.organization>.*</container.organization>|<container.organization>$ORGANIZATION</container.organization>|" pom.xml
-
-rm -f pom.xml.bak
-
-# Generate files from templates
-echo "📝 Generating configuration files..."
-
-# Set paths again for template substitution (after temp cleanup)
-if [ "$LOCAL_MODE" = true ]; then
-    TEMPLATES_DIR="$LOCAL_SOURCE_DIR/install/templates"
-else
-    # Re-clone just for templates since we cleaned up TEMP_DIR
-    TEMP_DIR2=$(mktemp -d)
-    git clone --depth 1 "$REPO_URL" "$TEMP_DIR2" 2>/dev/null
-    TEMPLATES_DIR="$TEMP_DIR2/install/templates"
-fi
-
-# Create .mvn/maven.config from template
-mkdir -p .mvn
-substitute_template "$TEMPLATES_DIR/maven-config.template" ".mvn/maven.config"
-
-# Create .env.example from template
-substitute_template "$TEMPLATES_DIR/env.template" ".env.example"
-
-# Create README.md from template
-substitute_template "$TEMPLATES_DIR/README.template.md" "README.md"
-
-# Cleanup temp clone if used
-[ -n "$TEMP_DIR2" ] && rm -rf "$TEMP_DIR2"
-
-echo ""
-echo "✅ Installation complete!"
-echo ""
-echo "Files created:"
-echo "  ✓ pom.xml (customized)"
-echo "  ✓ .mvn/maven.config"
-echo "  ✓ .env.example"
-echo "  ✓ additional-setup.sh"
-echo "  ✓ settings.xml.template"
-echo "  ✓ README.md"
-echo "  ✓ SECURITY.md"
-echo "  ✓ CONTAINER_CREDENTIALS.md"
-echo "  ✓ .gitignore"
-echo ""
-echo "Usage in child projects:"
-echo "  <parent>"
-echo "    <groupId>$GROUP_ID</groupId>"
-echo "    <artifactId>mvn-parent</artifactId>"
-echo "    <version>$VERSION</version>"
-echo "  </parent>"
-echo ""
-echo "════════════════════════════════════════════════════════════"
-echo ""
-echo "Would you like to configure credentials and repositories now?"
-echo "(You can also run ./additional-setup.sh later)"
-echo ""
-read -p "Run additional setup now? (y/N): " RUN_ADDITIONAL
-
-if [[ $RUN_ADDITIONAL =~ ^[Yy]$ ]]; then
-    echo ""
-    echo "Starting additional setup..."
-    echo ""
-    if [ -x ./additional-setup.sh ]; then
-        ./additional-setup.sh
-    else
-        chmod +x ./additional-setup.sh
-        ./additional-setup.sh
-    fi
-    
-    echo ""
-    echo "════════════════════════════════════════════════════════════"
-    echo ""
-fi
-
-echo "Next steps:"
-if [[ ! $RUN_ADDITIONAL =~ ^[Yy]$ ]]; then
-    echo "  1. (Optional) Configure credentials and repositories: ./additional-setup.sh"
-    echo "  2. Review and customize pom.xml for your company standards"
-    echo "  3. Install to local Maven repository: mvn clean install"
-    echo "  4. Commit to your company's version control"
-    echo "  5. Deploy to your Maven repository (Nexus/Artifactory): mvn deploy"
-    echo "  6. Reference from child projects"
-else
-    echo "  1. Review and customize pom.xml for your company standards"
-    echo "  2. Install to local Maven repository: mvn clean install"
-    echo "  3. Commit to your company's version control"
-    echo "  4. Deploy to your Maven repository (Nexus/Artifactory): mvn deploy"
-    echo "  5. Reference from child projects"
-fi
-echo ""
+# Exit with same code as local-install.sh
+exit $INSTALL_EXIT_CODE
