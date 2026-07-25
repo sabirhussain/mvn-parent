@@ -2,9 +2,9 @@
 -Dcontainer.registry={{REGISTRY}}
 -Dcontainer.organization={{ORGANIZATION}}
 
-# SonarQube configuration (local development)
-{{SONAR_COMMENT_PREFIX}}-Dsonar.host.url={{SONAR_HOST_URL}}
-{{SONAR_COMMENT_PREFIX}}-Dsonar.projectKey={{SONAR_PROJECT_KEY}}
+# SonarQube configuration (optional - uncomment and configure via additional-setup.sh)
+# -Dsonar.host.url=http://localhost:9000
+# -Dsonar.projectKey=${project.groupId}:${project.artifactId}
 
 # Optional: Activate default profiles
 -Pcoverage
