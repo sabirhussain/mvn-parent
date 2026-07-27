@@ -140,8 +140,16 @@ rm -f "$ENV_FILE.bak"
 # Set secure permissions
 chmod 600 "$ENV_FILE"
 
+# Copy .env to ~/.m2 directory (user-wide location)
+M2_ENV_FILE="$HOME/.m2/.env"
+mkdir -p "$HOME/.m2"
+cp "$ENV_FILE" "$M2_ENV_FILE"
+chmod 600 "$M2_ENV_FILE"
+
 echo ""
-echo "✅ Credentials saved to $ENV_FILE"
+echo "✅ Credentials saved to:"
+echo "   • $ENV_FILE (project-local)"
+echo "   • $M2_ENV_FILE (user-wide)"
 echo "   Permissions set to 600 (owner read/write only)"
 echo ""
 
@@ -390,11 +398,12 @@ fi
 
 echo ""
 echo "To use these credentials:"
-echo "  source .env"
+echo "  source .env              # Project-local"
+echo "  source ~/.m2/.env        # User-wide"
 echo "  mvn clean install"
 echo ""
 echo "To persist across sessions, add to your shell profile:"
-echo "  echo 'source $(pwd)/.env' >> ~/.bashrc"
+echo "  echo 'source ~/.m2/.env' >> ~/.bashrc"
 echo "  # or ~/.zshrc for zsh"
 echo ""
 echo "⚠️  Security reminder:"
