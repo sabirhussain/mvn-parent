@@ -10,12 +10,18 @@
 # Or with bash -c for passing arguments:
 #   bash <(curl -fsSL ...) [arguments for local-install.sh]
 
-set -e
+set -euo pipefail
 
 # Redirect stdin from TTY if running via pipe (e.g., curl | bash)
 if [ ! -t 0 ] && [ -e /dev/tty ]; then
     exec < /dev/tty
 fi
+
+check_dependencies() {
+    for cmd in git mktemp; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "❌ Required tool not found: $cmd"; exit 1; }
+    done
+}
 
 REPO_URL="https://github.com/sabirhussain/mvn-parent"
 
@@ -24,15 +30,18 @@ echo "║         Maven Parent POM - Remote Installation          ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
+check_dependencies
+
 # Clone repository to temp dir
 TEMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_DIR"' EXIT INT TERM
+
 echo "📦 Downloading Maven Parent POM..."
 
-git clone --depth 1 "$REPO_URL" "$TEMP_DIR" 2>/dev/null || {
-    echo "❌ Failed to clone repository"
-    rm -rf "$TEMP_DIR"
+if ! git clone --depth 1 "$REPO_URL" "$TEMP_DIR"; then
+    echo "❌ Failed to clone repository. Check your network connection and git configuration."
     exit 1
-}
+fi
 
 echo "✅ Downloaded to: $TEMP_DIR"
 echo ""
@@ -45,14 +54,3 @@ echo "🚀 Starting installation..."
 echo ""
 
 "$TEMP_DIR/install/local-install.sh" "$TEMP_DIR" "$@"
-
-# Store exit code
-INSTALL_EXIT_CODE=$?
-
-# Cleanup temp directory
-echo ""
-echo "🧹 Cleaning up temporary files..."
-rm -rf "$TEMP_DIR"
-
-# Exit with same code as local-install.sh
-exit $INSTALL_EXIT_CODE
