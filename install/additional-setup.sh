@@ -1,12 +1,39 @@
 #!/bin/bash
 # additional-setup.sh - Interactive credentials and repository setup
 
-set -e
+set -euo pipefail
 
 ENV_FILE=".env"
 ENV_EXAMPLE=".env.example"
 SETTINGS_TEMPLATE="settings.xml.template"
 SETTINGS_FILE="$HOME/.m2/settings.xml"
+
+# Initialize variables that may be conditionally set
+GITHUB_USERNAME=""
+GITHUB_TOKEN=""
+SONAR_HOST_URL=""
+SONAR_PROJECT_KEY=""
+SONAR_TOKEN=""
+SONAR_LOCAL_TOKEN=""
+MAVEN_REPO_USERNAME=""
+MAVEN_REPO_PASSWORD=""
+BACKUP_FILE=""
+MERGE_MODE=false
+SKIP_SETTINGS_GEN=false
+M2_ENV_FILE=""
+CONFIGURE_SONAR=""
+CONFIGURE_DISTRO=""
+COPY_TO_M2=""
+
+# Track temporary files for cleanup on exit
+_CLEANUP_FILES=()
+cleanup() {
+    for f in "${_CLEANUP_FILES[@]+"${_CLEANUP_FILES[@]}"}";
+    do
+        rm -f "$f"
+    done
+}
+trap cleanup EXIT INT TERM
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║   Maven Parent - Credentials & Repository Setup         ║"
@@ -23,7 +50,7 @@ fi
 # Check if .env already exists
 if [ -f "$ENV_FILE" ]; then
     echo "⚠️  Warning: $ENV_FILE already exists!"
-    read -p "Do you want to overwrite it? (y/N): " OVERWRITE
+    read -rp "Do you want to overwrite it? (y/N): " OVERWRITE
     if [[ ! $OVERWRITE =~ ^[Yy]$ ]]; then
         echo "Keeping existing $ENV_FILE"
         exit 0
@@ -39,10 +66,11 @@ echo ""
 echo "Press Ctrl+C to cancel at any time."
 echo ""
 
-# Detect registry from maven.config
+# Detect registry from maven.config (use awk for exact line matching, handles whitespace)
 DETECTED_REGISTRY="docker.io"
 if [ -f ".mvn/maven.config" ]; then
-    DETECTED_REGISTRY=$(grep "container.registry" .mvn/maven.config | cut -d'=' -f2 || echo "docker.io")
+    _reg=$(awk -F'=' '/^-Dcontainer\.registry=/{print $2; exit}' .mvn/maven.config 2>/dev/null || true)
+    [ -n "$_reg" ] && DETECTED_REGISTRY="$_reg"
 fi
 
 echo "Detected registry: $DETECTED_REGISTRY"
@@ -50,16 +78,16 @@ echo ""
 
 # Container Registry Credentials
 echo "=== Container Registry Credentials ==="
-read -p "Container registry username: " DOCKER_USERNAME
-read -s -p "Container registry password/token: " DOCKER_PASSWORD
+read -rp "Container registry username: " DOCKER_USERNAME
+read -rsp "Container registry password/token: " DOCKER_PASSWORD
 echo ""
 
 # GitHub-specific (if using GHCR)
 if [[ "$DETECTED_REGISTRY" == *"ghcr.io"* ]]; then
     echo ""
     echo "=== GitHub Container Registry ==="
-    read -p "GitHub username: " GITHUB_USERNAME
-    read -s -p "GitHub Personal Access Token (with write:packages): " GITHUB_TOKEN
+    read -rp "GitHub username: " GITHUB_USERNAME
+    read -rsp "GitHub Personal Access Token (with write:packages): " GITHUB_TOKEN
     echo ""
 fi
 
@@ -67,19 +95,22 @@ fi
 echo ""
 echo "=== SonarQube/SonarCloud (Optional) ==="
 echo "Configure SonarQube settings for code quality analysis."
-read -p "Configure SonarQube? (y/N): " CONFIGURE_SONAR
+read -rp "Configure SonarQube? (y/N): " CONFIGURE_SONAR
 
 if [[ $CONFIGURE_SONAR =~ ^[Yy]$ ]]; then
-    read -p "Enter Sonar host URL [http://localhost:9000]: " SONAR_HOST_URL
+    read -rp "Enter Sonar host URL [http://localhost:9000]: " SONAR_HOST_URL
     SONAR_HOST_URL=${SONAR_HOST_URL:-http://localhost:9000}
     
-    read -p "Enter Sonar project key [\${project.groupId}:\${project.artifactId}]: " SONAR_PROJECT_KEY
-    SONAR_PROJECT_KEY=${SONAR_PROJECT_KEY:-\${project.groupId}:\${project.artifactId}}
+    read -rp "Enter Sonar project key [\${project.groupId}:\${project.artifactId}]: " SONAR_PROJECT_KEY
+    # shellcheck disable=SC2016  # ${project.groupId} is a literal Maven property reference, not shell expansion
+    SONAR_PROJECT_KEY=${SONAR_PROJECT_KEY:-'${project.groupId}:${project.artifactId}'}
     
-    # Tokens for authentication
+    # Tokens for authentication - use -s to avoid echoing secrets to terminal
     echo ""
-    read -p "SonarCloud token (leave empty to skip): " SONAR_TOKEN
-    read -p "Local SonarQube token (leave empty to skip): " SONAR_LOCAL_TOKEN
+    read -rsp "SonarCloud token (leave empty to skip): " SONAR_TOKEN
+    echo ""
+    read -rsp "Local SonarQube token (leave empty to skip): " SONAR_LOCAL_TOKEN
+    echo ""
 else
     SONAR_HOST_URL=""
     SONAR_PROJECT_KEY=""
@@ -90,67 +121,85 @@ fi
 # Maven Repository
 echo ""
 echo "=== Maven Repository (Optional) ==="
-read -p "Maven repository username (leave empty to skip): " MAVEN_REPO_USERNAME
+read -rp "Maven repository username (leave empty to skip): " MAVEN_REPO_USERNAME
 if [ -n "$MAVEN_REPO_USERNAME" ]; then
-    read -s -p "Maven repository password: " MAVEN_REPO_PASSWORD
+    read -rsp "Maven repository password: " MAVEN_REPO_PASSWORD
     echo ""
 fi
 
-# Generate .env file from .env.example template
+# Generate .env by processing .env.example line-by-line, replacing known export
+# placeholders with safely-quoted actual values (printf %q).
+# The template remains the single source of truth for file structure and comments.
 echo ""
 echo "📝 Creating $ENV_FILE from template..."
 
-# Copy template and substitute values
-cp "$ENV_EXAMPLE" "$ENV_FILE"
+write_env_from_template() {
+    local src="$1"
+    local dst="$2"
+    while IFS= read -r line; do
+        case "$line" in
+            'export DOCKER_USERNAME='*)
+                printf 'export DOCKER_USERNAME=%q\n' "$DOCKER_USERNAME" ;;
+            'export DOCKER_PASSWORD='*)
+                printf 'export DOCKER_PASSWORD=%q\n' "$DOCKER_PASSWORD" ;;
+            '# export GITHUB_USERNAME='*)
+                if [ -n "$GITHUB_USERNAME" ]; then
+                    printf 'export GITHUB_USERNAME=%q\n' "$GITHUB_USERNAME"
+                else
+                    printf '%s\n' "$line"
+                fi ;;
+            '# export GITHUB_TOKEN='*)
+                if [ -n "$GITHUB_TOKEN" ]; then
+                    printf 'export GITHUB_TOKEN=%q\n' "$GITHUB_TOKEN"
+                else
+                    printf '%s\n' "$line"
+                fi ;;
+            'export SONAR_TOKEN='*)
+                if [ -n "$SONAR_TOKEN" ]; then
+                    printf 'export SONAR_TOKEN=%q\n' "$SONAR_TOKEN"
+                else
+                    printf '# export SONAR_TOKEN=your-sonarcloud-token-here\n'
+                fi ;;
+            'export SONAR_LOCAL_TOKEN='*)
+                if [ -n "$SONAR_LOCAL_TOKEN" ]; then
+                    printf 'export SONAR_LOCAL_TOKEN=%q\n' "$SONAR_LOCAL_TOKEN"
+                else
+                    printf '# export SONAR_LOCAL_TOKEN=your-local-sonar-token-here\n'
+                fi ;;
+            'export MAVEN_REPO_USERNAME='*)
+                if [ -n "$MAVEN_REPO_USERNAME" ]; then
+                    printf 'export MAVEN_REPO_USERNAME=%q\n' "$MAVEN_REPO_USERNAME"
+                else
+                    printf '# export MAVEN_REPO_USERNAME=your-maven-username\n'
+                fi ;;
+            'export MAVEN_REPO_PASSWORD='*)
+                if [ -n "$MAVEN_REPO_PASSWORD" ]; then
+                    printf 'export MAVEN_REPO_PASSWORD=%q\n' "$MAVEN_REPO_PASSWORD"
+                else
+                    printf '# export MAVEN_REPO_PASSWORD=your-maven-password\n'
+                fi ;;
+            *)
+                printf '%s\n' "$line" ;;
+        esac
+    done < "$src" > "$dst"
+}
 
-# Substitute placeholder values with actual credentials
-sed -i.bak \
-    -e "s|export DOCKER_USERNAME=.*|export DOCKER_USERNAME=\"$DOCKER_USERNAME\"|g" \
-    -e "s|export DOCKER_PASSWORD=.*|export DOCKER_PASSWORD=\"$DOCKER_PASSWORD\"|g" \
-    "$ENV_FILE"
+write_env_from_template "$ENV_EXAMPLE" "$ENV_FILE"
 
-# Handle GitHub credentials (uncomment if provided)
-if [ -n "$GITHUB_USERNAME" ]; then
-    sed -i.bak \
-        -e "s|# export GITHUB_USERNAME=.*|export GITHUB_USERNAME=\"$GITHUB_USERNAME\"|g" \
-        -e "s|# export GITHUB_TOKEN=.*|export GITHUB_TOKEN=\"$GITHUB_TOKEN\"|g" \
-        "$ENV_FILE"
-fi
-
-# Handle Sonar credentials (update if provided)
-if [ -n "$SONAR_TOKEN" ]; then
-    sed -i.bak "s|export SONAR_TOKEN=.*|export SONAR_TOKEN=\"$SONAR_TOKEN\"|g" "$ENV_FILE"
-fi
-
-if [ -n "$SONAR_LOCAL_TOKEN" ]; then
-    sed -i.bak "s|export SONAR_LOCAL_TOKEN=.*|export SONAR_LOCAL_TOKEN=\"$SONAR_LOCAL_TOKEN\"|g" "$ENV_FILE"
-fi
-
-# Handle Maven repo credentials (update if provided)
-if [ -n "$MAVEN_REPO_USERNAME" ]; then
-    sed -i.bak \
-        -e "s|export MAVEN_REPO_USERNAME=.*|export MAVEN_REPO_USERNAME=\"$MAVEN_REPO_USERNAME\"|g" \
-        -e "s|export MAVEN_REPO_PASSWORD=.*|export MAVEN_REPO_PASSWORD=\"$MAVEN_REPO_PASSWORD\"|g" \
-        "$ENV_FILE"
-fi
-
-# Clean up backup file
-rm -f "$ENV_FILE.bak"
-
-# Set secure permissions
 chmod 600 "$ENV_FILE"
-
-# Copy .env to ~/.m2 directory (user-wide location)
-M2_ENV_FILE="$HOME/.m2/.env"
-mkdir -p "$HOME/.m2"
-cp "$ENV_FILE" "$M2_ENV_FILE"
-chmod 600 "$M2_ENV_FILE"
-
-echo ""
-echo "✅ Credentials saved to:"
-echo "   • $ENV_FILE (project-local)"
-echo "   • $M2_ENV_FILE (user-wide)"
+echo "✅ Credentials saved to: $ENV_FILE"
 echo "   Permissions set to 600 (owner read/write only)"
+echo ""
+
+# Ask before copying to ~/.m2 to avoid silently placing credentials in a global location
+read -rp "Copy credentials to ~/.m2/.env for user-wide access? (y/N): " COPY_TO_M2
+if [[ $COPY_TO_M2 =~ ^[Yy]$ ]]; then
+    M2_ENV_FILE="$HOME/.m2/.env"
+    mkdir -p "$HOME/.m2"
+    cp "$ENV_FILE" "$M2_ENV_FILE"
+    chmod 600 "$M2_ENV_FILE"
+    echo "✅ Also saved to: $M2_ENV_FILE"
+fi
 echo ""
 
 # Update maven.config with SonarQube settings if configured
@@ -183,7 +232,7 @@ echo "=== Maven Distribution Management (Optional) ==="
 echo "════════════════════════════════════════════════════════════"
 echo ""
 echo "Configure repository URLs for deploying artifacts (mvn deploy)."
-read -p "Configure distribution management? (y/N): " CONFIGURE_DISTRO
+read -rp "Configure distribution management? (y/N): " CONFIGURE_DISTRO
 
 if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
     echo ""
@@ -191,19 +240,19 @@ if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
     echo ""
     
     # Snapshot repository
-    read -p "Snapshot repository URL [https://nexus.example.com/repository/maven-snapshots/]: " SNAPSHOT_REPO_URL
+    read -rp "Snapshot repository URL [https://nexus.example.com/repository/maven-snapshots/]: " SNAPSHOT_REPO_URL
     SNAPSHOT_REPO_URL=${SNAPSHOT_REPO_URL:-https://nexus.example.com/repository/maven-snapshots/}
     
     # Release repository
-    read -p "Release repository URL [https://nexus.example.com/repository/maven-releases/]: " RELEASE_REPO_URL
+    read -rp "Release repository URL [https://nexus.example.com/repository/maven-releases/]: " RELEASE_REPO_URL
     RELEASE_REPO_URL=${RELEASE_REPO_URL:-https://nexus.example.com/repository/maven-releases/}
     
     # Server IDs
     echo ""
-    read -p "Snapshot repository server ID [company-snapshots]: " SNAPSHOT_REPO_ID
+    read -rp "Snapshot repository server ID [company-snapshots]: " SNAPSHOT_REPO_ID
     SNAPSHOT_REPO_ID=${SNAPSHOT_REPO_ID:-company-snapshots}
     
-    read -p "Release repository server ID [company-releases]: " RELEASE_REPO_ID
+    read -rp "Release repository server ID [company-releases]: " RELEASE_REPO_ID
     RELEASE_REPO_ID=${RELEASE_REPO_ID:-company-releases}
     
     # Check if settings.xml.template exists
@@ -219,7 +268,7 @@ if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
         echo "Where should settings.xml be placed?"
         echo "  1) ~/.m2/settings.xml (user-wide, recommended)"
         echo "  2) ./settings.xml (project-local)"
-        read -p "Choose location [1]: " SETTINGS_LOCATION
+        read -rp "Choose location [1]: " SETTINGS_LOCATION
         SETTINGS_LOCATION=${SETTINGS_LOCATION:-1}
         
         if [ "$SETTINGS_LOCATION" = "1" ]; then
@@ -251,7 +300,7 @@ if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
                 echo "     1) Smart merge - Keep existing + add our sections (recommended)"
                 echo "     2) Replace entirely - Use our template (backup preserved)"
                 echo "     3) Skip - Keep existing unchanged"
-                read -p "Choose option [1]: " MERGE_OPTION
+                read -rp "Choose option [1]: " MERGE_OPTION
                 MERGE_OPTION=${MERGE_OPTION:-1}
                 
                 case $MERGE_OPTION in
@@ -292,8 +341,9 @@ if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
                 # Smart merge: append our sections
                 echo "📝 Merging configurations into $SETTINGS_FILE..."
                 
-                # Generate our sections from template
+                # Generate our sections from template (temp files tracked for cleanup)
                 TEMP_SETTINGS=$(mktemp)
+                _CLEANUP_FILES+=("$TEMP_SETTINGS")
                 sed -e "s|{{RELEASE_REPO_URL}}|$RELEASE_REPO_URL|g" \
                     -e "s|{{SNAPSHOT_REPO_URL}}|$SNAPSHOT_REPO_URL|g" \
                     -e "s|{{RELEASE_REPO_ID}}|$RELEASE_REPO_ID|g" \
@@ -302,15 +352,18 @@ if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
                 
                 # Extract our marked sections from template
                 SERVERS_SECTION_FILE=$(mktemp)
+                _CLEANUP_FILES+=("$SERVERS_SECTION_FILE")
                 PROFILES_SECTION_FILE=$(mktemp)
+                _CLEANUP_FILES+=("$PROFILES_SECTION_FILE")
+                MERGED_FILE=$(mktemp)
+                _CLEANUP_FILES+=("$MERGED_FILE" "${MERGED_FILE}.tmp")
+                
                 sed -n '/<!-- MVN-PARENT-START: Servers/,/<!-- MVN-PARENT-END: Servers -->/p' "$TEMP_SETTINGS" > "$SERVERS_SECTION_FILE"
                 sed -n '/<!-- MVN-PARENT-START: Profiles/,/<!-- MVN-PARENT-END: Profiles -->/p' "$TEMP_SETTINGS" > "$PROFILES_SECTION_FILE"
                 
                 # Remove old MVN-PARENT sections if they exist
                 sed -i.merge '/<!-- MVN-PARENT-START:/,/<!-- MVN-PARENT-END:/d' "$SETTINGS_FILE"
-                
-                # Create a temporary merged file
-                MERGED_FILE=$(mktemp)
+                _CLEANUP_FILES+=("${SETTINGS_FILE}.merge")
                 
                 # Process settings.xml line by line and insert our sections
                 while IFS= read -r line; do
@@ -337,9 +390,6 @@ if [[ $CONFIGURE_DISTRO =~ ^[Yy]$ ]]; then
                 
                 # Replace original with merged file
                 mv "$MERGED_FILE" "$SETTINGS_FILE"
-                
-                # Clean up temp files
-                rm -f "$TEMP_SETTINGS" "$SERVERS_SECTION_FILE" "$PROFILES_SECTION_FILE" "${SETTINGS_FILE}.merge" "${MERGED_FILE}.tmp"
                 
                 echo "✅ Merged configurations into $SETTINGS_FILE"
                 echo "   Your existing settings preserved"
@@ -399,7 +449,9 @@ fi
 echo ""
 echo "To use these credentials:"
 echo "  source .env              # Project-local"
-echo "  source ~/.m2/.env        # User-wide"
+if [ -n "$M2_ENV_FILE" ]; then
+    echo "  source $M2_ENV_FILE    # User-wide"
+fi
 echo "  mvn clean install"
 echo ""
 echo "To persist across sessions, add to your shell profile:"

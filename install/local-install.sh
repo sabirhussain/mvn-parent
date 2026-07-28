@@ -10,10 +10,16 @@
 # Arguments:
 #   source-directory: Path to mvn-parent repository root (default: parent of script dir)
 
-set -e
+set -euo pipefail
+
+check_dependencies() {
+    for cmd in git sed mktemp; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "❌ Required tool not found: $cmd"; exit 1; }
+    done
+}
 
 # Determine source directory
-if [ -n "$1" ]; then
+if [ -n "${1:-}" ]; then
     SOURCE_DIR="$1"
 else
     # Default: parent directory of this script
@@ -40,10 +46,16 @@ if [ ! -d "$SOURCE_DIR/install/templates" ]; then
     exit 1
 fi
 
+check_dependencies
+
+# Derive current values from source pom.xml for idempotent replacement
+SRC_GROUP_ID=$(grep -m1 '<groupId>' "$SOURCE_DIR/pom.xml" | sed 's|[[:space:]]*<groupId>\(.*\)</groupId>[[:space:]]*|\1|')
+SRC_VERSION=$(grep -m1 '<version>' "$SOURCE_DIR/pom.xml" | sed 's|[[:space:]]*<version>\(.*\)</version>[[:space:]]*|\1|')
+
 # Template substitution function
 substitute_template() {
-    local template_file=$1
-    local output_file=$2
+    local template_file="$1"
+    local output_file="$2"
     
     sed -e "s|{{GROUP_ID}}|$GROUP_ID|g" \
         -e "s|{{VERSION}}|$VERSION|g" \
@@ -57,18 +69,42 @@ echo "║         Maven Parent POM - Company Setup                ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-# Prompt for customization
-read -p "Enter your company groupId (e.g., com.mycompany): " GROUP_ID
+# Prompt for customization (skip if already set in environment for CI/non-interactive mode)
+if [ -z "${GROUP_ID:-}" ]; then
+    read -rp "Enter your company groupId (e.g., com.mycompany): " GROUP_ID
+fi
 GROUP_ID=${GROUP_ID:-com.example}
+if [[ ! "$GROUP_ID" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo "❌ Invalid groupId. Use only letters, numbers, dots, hyphens, and underscores."
+    exit 1
+fi
 
-read -p "Enter container registry (docker.io/ghcr.io/custom): " REGISTRY
+if [ -z "${REGISTRY:-}" ]; then
+    read -rp "Enter container registry (docker.io/ghcr.io/custom): " REGISTRY
+fi
 REGISTRY=${REGISTRY:-docker.io}
+if [ -z "$REGISTRY" ]; then
+    echo "❌ Registry cannot be empty."
+    exit 1
+fi
 
-read -p "Enter container organization/namespace: " ORGANIZATION
+if [ -z "${ORGANIZATION:-}" ]; then
+    read -rp "Enter container organization/namespace: " ORGANIZATION
+fi
 ORGANIZATION=${ORGANIZATION:-${GROUP_ID##*.}}
+if [[ ! "$ORGANIZATION" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo "❌ Invalid organization. Use only letters, numbers, dots, hyphens, and underscores."
+    exit 1
+fi
 
-read -p "Enter parent version [1.0.0-SNAPSHOT]: " VERSION
+if [ -z "${VERSION:-}" ]; then
+    read -rp "Enter parent version [1.0.0-SNAPSHOT]: " VERSION
+fi
 VERSION=${VERSION:-1.0.0-SNAPSHOT}
+if [[ ! "$VERSION" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo "❌ Invalid version format. Use only letters, numbers, dots, hyphens, and underscores."
+    exit 1
+fi
 
 echo ""
 echo "Configuration Summary:"
@@ -78,7 +114,7 @@ echo "  Organization: $ORGANIZATION"
 echo "  Version:      $VERSION"
 echo "  Install Dir:  $(pwd)"
 echo ""
-read -p "Proceed with installation? (y/N): " CONFIRM
+read -rp "Proceed with installation? (y/N): " CONFIRM
 
 if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
     echo "Installation cancelled."
@@ -92,27 +128,26 @@ DOCS_DIR="$SOURCE_DIR/docs"
 # Copy core files to current directory
 echo "📋 Copying project files..."
 cp "$SOURCE_DIR/pom.xml" .
-cp -r "$SOURCE_DIR/.mvn" . 2>/dev/null || true
-cp "$SOURCE_DIR/.gitignore" . 2>/dev/null || true
-cp "$SOURCE_DIR/LICENSE" . 2>/dev/null || true
+[ -d "$SOURCE_DIR/.mvn" ] && cp -r "$SOURCE_DIR/.mvn" . || true
+[ -f "$SOURCE_DIR/.gitignore" ] && cp "$SOURCE_DIR/.gitignore" . || true
+[ -f "$SOURCE_DIR/LICENSE" ] && cp "$SOURCE_DIR/LICENSE" . || true
 
 # Copy scripts
 cp "$SOURCE_DIR/install/additional-setup.sh" .
-chmod +x additional-setup.sh 2>/dev/null || true
+chmod +x additional-setup.sh
 
 # Copy documentation
 cp "$DOCS_DIR/SECURITY.md" .
 cp "$DOCS_DIR/CONTAINER_CREDENTIALS.md" .
 
-# Update pom.xml
+# Update pom.xml: all substitutions in a single atomic sed invocation
 echo "🔧 Customizing pom.xml..."
-sed -i.bak "s|<groupId>io.xprevel</groupId>|<groupId>$GROUP_ID</groupId>|g" pom.xml
-sed -i.bak "s|<version>1.0.0-SNAPSHOT</version>|<version>$VERSION</version>|" pom.xml
-
-# Update properties
-sed -i.bak "s|<container.registry>.*</container.registry>|<container.registry>$REGISTRY</container.registry>|" pom.xml
-sed -i.bak "s|<container.organization>.*</container.organization>|<container.organization>$ORGANIZATION</container.organization>|" pom.xml
-
+sed -i.bak \
+    -e "s|<groupId>$SRC_GROUP_ID</groupId>|<groupId>$GROUP_ID</groupId>|g" \
+    -e "s|<version>$SRC_VERSION</version>|<version>$VERSION</version>|" \
+    -e "s|<container\.registry>.*</container\.registry>|<container.registry>$REGISTRY</container.registry>|" \
+    -e "s|<container\.organization>.*</container\.organization>|<container.organization>$ORGANIZATION</container.organization>|" \
+    pom.xml
 rm -f pom.xml.bak
 
 # Generate files from templates
@@ -157,7 +192,7 @@ echo ""
 echo "Would you like to configure credentials and repositories now?"
 echo "(You can also run ./additional-setup.sh later)"
 echo ""
-read -p "Run additional setup now? (y/N): " RUN_ADDITIONAL
+read -rp "Run additional setup now? (y/N): " RUN_ADDITIONAL
 
 if [[ $RUN_ADDITIONAL =~ ^[Yy]$ ]]; then
     echo ""
